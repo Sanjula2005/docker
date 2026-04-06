@@ -3,10 +3,10 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "sanjula252525/myapp2"
+        DOCKER_HUB_CREDS = credentials('dockerhub-creds')
     }
 
     stages {
-
         stage('Clone Repository') {
             steps {
                 git 'https://github.com/Sanjula2005/docker.git'
@@ -15,31 +15,16 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    docker.build("${DOCKER_IMAGE}:latest")
-                }
+                // Use bat for Windows environments
+                bat "docker build -t ${DOCKER_IMAGE}:latest ."
             }
         }
 
-        stage('Login to Docker Hub') {
+        stage('Login and Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                }
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                script {
-                    docker.withRegistry('', 'dockerhub-creds') {
-                        docker.image("${DOCKER_IMAGE}:latest").push()
-                    }
-                }
+                // Use the credentials directly in a login command
+                bat "echo %DOCKER_HUB_CREDS_PSW% | docker login -u %DOCKER_HUB_CREDS_USR% --password-stdin"
+                bat "docker push ${DOCKER_IMAGE}:latest"
             }
         }
     }
