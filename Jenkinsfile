@@ -2,34 +2,51 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "sanjula252525/myapp2"
-        // This creates variables: DOCKER_HUB_CREDS_USR and DOCKER_HUB_CREDS_PSW
-        DOCKER_HUB_CREDS = credentials('dockerhub-creds')
+        DOCKERHUB_USER = 'sanjula252525' 
+        APP_NAME = 'myapp3'
+        IMAGE_TAG = "v${env.BUILD_NUMBER}"
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %DOCKER_IMAGE%:latest ."
+                script {
+                    echo "Building image: ${DOCKERHUB_USER}/${APP_NAME}:${IMAGE_TAG}"
+                    // Change 'sh' to 'bat' for Windows
+                    bat "docker build -t ${DOCKERHUB_USER}/${APP_NAME}:${IMAGE_TAG} ."
+                }
             }
         }
 
-        stage('Login to Docker Hub') {
+        stage('Login & Push to Docker Hub') {
             steps {
-                // Quotes around the password handle special characters in Windows
-                bat "echo \"%DOCKER_HUB_CREDS_PSW%\" | docker login -u %DOCKER_HUB_CREDS_USR% --password-stdin"
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                bat "docker push %DOCKER_IMAGE%:latest"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
+                                  passwordVariable: 'DOCKER_PASS', 
+                                  usernameVariable: 'DOCKER_USER')]) {
+                    script {
+                        // Change 'sh' to 'bat' and update the login syntax for Windows cmd
+                        bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
+                        bat "docker push %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG%"
+                        
+                        bat "docker tag %DOCKER_USER%/%APP_NAME%:%IMAGE_TAG% %DOCKER_USER%/%APP_NAME%:latest"
+                        bat "docker push %DOCKER_USER%/%APP_NAME%:latest"
+                    }
+                }
             }
         }
     }
 
     post {
-        success { echo 'Success!' }
-        failure { echo 'Failed - Check credentials or Token permissions.' }
+        always {
+            echo "Cleaning up local images..."
+            // Use 'bat' and the Windows way to ignore errors (|| exit 0)
+            bat "docker rmi %DOCKERHUB_USER%/%APP_NAME%:%IMAGE_TAG% || exit 0"
+        }
     }
 }
